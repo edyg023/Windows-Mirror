@@ -6,22 +6,81 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 
 namespace WindowsMirror;
 
 public partial class MainWindow : Window
 {
     private readonly Settings _settings;
+    private readonly IWebcamService _webcamService;
+    private Image? _videoImage;
+    private TextBlock? _statusText;
 
     public MainWindow()
     {
         _settings = Settings.Load();
+        _webcamService = new WebcamService();
         
         InitializeUI();
         ApplyWindowSettings();
         
         // Handle window closing
         Closing += MainWindow_Closing;
+        
+        // Subscribe to webcam events
+        _webcamService.FrameAvailable += OnFrameAvailable;
+        
+        // Start webcam when window loads
+        Loaded += MainWindow_Loaded;
+    }
+
+    private async void MainWindow_Loaded(object? sender, RoutedEventArgs e)
+    {
+        if (_webcamService.IsAvailable)
+        {
+            if (_statusText != null)
+            {
+                _statusText.Text = "Starting webcam...";
+            }
+            
+            try
+            {
+                await _webcamService.StartAsync();
+                
+                if (_statusText != null)
+                {
+                    _statusText.IsVisible = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_statusText != null)
+                {
+                    _statusText.Text = $"Error starting webcam: {ex.Message}";
+                }
+            }
+        }
+        else
+        {
+            if (_statusText != null)
+            {
+                _statusText.Text = "No webcam detected.\nThis is a demonstration with simulated video feed.";
+            }
+        }
+    }
+
+    private void OnFrameAvailable(Bitmap frame)
+    {
+        if (_videoImage != null)
+        {
+            _videoImage.Source = frame;
+        }
+        
+        if (_statusText != null && _statusText.IsVisible)
+        {
+            _statusText.IsVisible = false;
+        }
     }
 
     private void InitializeUI()
@@ -46,22 +105,30 @@ public partial class MainWindow : Window
         Grid.SetRow(videoBorder, 0);
 
         var videoPanel = new Panel();
-        var backgroundRect = new Rectangle { Fill = Brushes.DarkGray };
-        videoPanel.Children.Add(backgroundRect);
-
-        var statusText = new TextBlock
+        
+        // Video image
+        _videoImage = new Image
         {
-            Name = "StatusText",
-            Text = "Windows Mirror - Webcam functionality will be implemented soon.\nThis demonstrates the application structure and settings.",
+            Stretch = Stretch.Uniform,
+            StretchDirection = StretchDirection.Both
+        };
+        videoPanel.Children.Add(_videoImage);
+
+        // Status text overlay
+        _statusText = new TextBlock
+        {
+            Text = "Initializing Windows Mirror...",
             Foreground = Brushes.White,
             FontSize = 16,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(20)
+            Margin = new Thickness(20),
+            Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)) // Semi-transparent background
         };
-        videoPanel.Children.Add(statusText);
+        videoPanel.Children.Add(_statusText);
+        
         videoBorder.Child = videoPanel;
 
         // Control panel
@@ -69,7 +136,8 @@ public partial class MainWindow : Window
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(5)
+            Margin = new Thickness(5),
+            Background = new SolidColorBrush(Color.FromArgb(240, 240, 240, 240)) // Light semi-transparent background
         };
         Grid.SetRow(controlPanel, 1);
 
@@ -112,7 +180,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    private async void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         // Save window settings
         _settings.WindowWidth = Width;
@@ -120,6 +188,9 @@ public partial class MainWindow : Window
         _settings.WindowLeft = Position.X;
         _settings.WindowTop = Position.Y;
         _settings.Save();
+        
+        // Stop webcam
+        await _webcamService.StopAsync();
     }
 
     private void SettingsButton_Click(object? sender, RoutedEventArgs e)
@@ -130,10 +201,15 @@ public partial class MainWindow : Window
 
     private void CameraSettingsButton_Click(object? sender, RoutedEventArgs e)
     {
+        _webcamService.OpenSettings();
+        
         ShowMessage("Camera Settings", 
             "Camera Settings\n\n" +
-            "Camera settings functionality will open the platform-specific camera configuration dialog.\n\n" +
-            "On Windows, this would access the camera properties through DirectShow interfaces.");
+            "In a full implementation, this would open platform-specific camera settings:\n\n" +
+            "• Windows: DirectShow property pages\n" +
+            "• Linux: V4L2 control interface\n" +
+            "• macOS: AVFoundation settings\n\n" +
+            "Current implementation shows a simulated webcam feed for demonstration.");
     }
 
     private void ShowMessage(string title, string message)
@@ -141,8 +217,8 @@ public partial class MainWindow : Window
         var messageBox = new Window
         {
             Title = title,
-            Width = 400,
-            Height = 250,
+            Width = 450,
+            Height = 300,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Content = new StackPanel
             {
