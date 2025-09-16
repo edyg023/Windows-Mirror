@@ -416,3 +416,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Windows Mirror specific
+# Keep the Assets README but ignore actual icon files until they're created
+Assets/*.ico
+Assets/*.png
+Assets/*.icns
+!Assets/README.md
